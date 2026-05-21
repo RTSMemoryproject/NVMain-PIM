@@ -78,7 +78,8 @@ enum OpType
     ODRA, /*Overlapped Double Row Activate primitive for PIM in DRAM*/
     OTRA, /*Overlapped Triple Row Activate primitive for PIM in DRAM*/
     LW, /*Local Write primitive for PIM in DRAM*/
-    ROWCLONE_PSM /*Row Clone PSM primitive for PIM in DRAM (not implemented yet) */
+    ROWCLONE_PSM, /*Row Clone PSM primitive for PIM in DRAM (not implemented yet) */
+    TR_READ /* Transverse Read PIM operation (DNA Sequence Alignment) */
 };
 
 enum MemRequestStatus 

@@ -58,6 +58,7 @@
 #include <cassert>
 #include <iostream>
 #include <limits>
+#include <cmath>
 
 /*
  * Using -O3 in gcc causes the popcount methods to return incorrect values.
@@ -139,6 +140,7 @@ SubArray::SubArray( )
     double_row_activates = 0;
     triple_row_activates = 0;
     local_writes = 0;
+    transverse_reads = 0;
 
     actWaits = 0;
     actWaitTotal = 0;
@@ -303,6 +305,7 @@ void SubArray::RegisterStats( )
     AddStat(double_row_activates);
     AddStat(triple_row_activates);
     AddStat(local_writes);
+    AddStat(transverse_reads);
 
     /* Register these stats only for RaceTrack Memory */
     if( p->MemIsRTM )
@@ -1600,7 +1603,7 @@ bool SubArray::IsIssuable( NVMainRequest *req, FailReason *reason )
     if( nextCommand != CMD_NOP )
         return false;
 
-    if( req->type == ACTIVATE || req->type == TRA || req->type == DRA || req->type == SRA )
+    if( req->type == ACTIVATE || req->type == TRA || req->type == DRA || req->type == SRA || req->type == TR_READ )
     {
         if( nextActivate > (GetEventQueue()->GetCurrentCycle()) /* if it is too early to open */
             || (p->UsePrecharge && state != SUBARRAY_CLOSED)   /* or, the subarray needs a precharge */
@@ -1743,6 +1746,9 @@ bool SubArray::IssueCommand( NVMainRequest *req )
             case DRA:
             case TRA:
                 rv = this->MultiRowActivate( req );
+                break;
+            case TR_READ:
+                rv = this->TransverseRead( req );
                 break;
             case READ:
             case READ_PRECHARGE:
@@ -2091,4 +2097,50 @@ ncounter_t SubArray::FindClosestPort(uint64_t dbc, uint64_t domain)
   }
     
   return AP;  
+}
+
+bool SubArray::TransverseRead( NVMainRequest *request )
+{
+    uint64_t activateRow;
+    request->address.GetTranslatedAddress( &activateRow, NULL, NULL, NULL, NULL, NULL );
+
+    /* Check if we need to cancel or pause a write to service this request. */
+    CheckWritePausing( );
+
+    if( nextActivate > GetEventQueue()->GetCurrentCycle() )
+    {
+        std::cerr << "NVMain Error: SubArray violates ACTIVATION timing constraint!" << std::endl;
+        return false;
+    }
+    else if( p->UsePrecharge && state != SUBARRAY_CLOSED )
+    {
+        std::cerr << "NVMain Error: try to open a subarray that is not idle!" << std::endl;
+        return false;
+    }
+
+    // 1. LATENCY CALCULATION: 5 ns converted dynamically to cycles
+    ncycle_t tr_cycles = static_cast<ncycle_t>(std::ceil(5.0 * (static_cast<double>(p->CLK) / 1000.0)));
+
+    // 2. TIMING CONSTRAINTS UPDATING
+    nextPrecharge = MAX( nextPrecharge, GetEventQueue()->GetCurrentCycle() + tr_cycles );
+    nextRead = MAX( nextRead, GetEventQueue()->GetCurrentCycle() + tr_cycles );
+    nextWrite = MAX( nextWrite, GetEventQueue()->GetCurrentCycle() + tr_cycles );
+    nextPowerDown = MAX( nextPowerDown, GetEventQueue()->GetCurrentCycle() + tr_cycles );
+
+    // 3. SEND EVENT RESPONSE CALLBACK
+    GetEventQueue()->InsertEvent( EventResponse, this, request, GetEventQueue()->GetCurrentCycle() + tr_cycles );
+
+    // 4. SUBARRAY INTERNAL STATE UPDATE
+    openRow = activateRow;
+    state = SUBARRAY_OPEN;
+    writeCycle = false;
+    lastActivate = GetEventQueue()->GetCurrentCycle();
+
+    transverse_reads++;
+
+    // 5. ENERGY CALCULATION: 0.175 nJ flat energy added
+    subArrayEnergy += 0.175;
+    activeEnergy += 0.175;
+
+    return true;
 }

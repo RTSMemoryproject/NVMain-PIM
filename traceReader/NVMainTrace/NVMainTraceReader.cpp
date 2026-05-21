@@ -155,6 +155,8 @@ bool NVMainTraceReader::GetNextAccess( TraceLine *nextAccess )
                     operation = DRA;
                 else if(field == "T" || field == "TRA" )
                     operation = TRA;
+                else if(field == "TR" || field == "TR_READ" )
+                    operation = TR_READ;
                 else if (field == "ODRA" )
                     operation = ODRA;
                 else if(field == "OTRA" )
@@ -266,7 +268,7 @@ bool NVMainTraceReader::GetNextAccess( TraceLine *nextAccess )
 
     if( operation != READ && operation != WRITE && 
         operation != TRA && operation != DRA && operation != SRA &&
-        operation != OTRA && operation != ODRA && operation != OA )
+        operation != OTRA && operation != ODRA && operation != OA && operation != TR_READ )
         std::cout << "NVMainTraceReader: Unknown Operation: " << operation 
             << "Line number is " << linenum << ". Full Line is \"" << fullLine 
             << "\"" << std::endl;
@@ -294,7 +296,7 @@ bool NVMainTraceReader::GetNextAccess( TraceLine *nextAccess )
     /* OA and TRA require address2; if trace has only one address, use it for both
      * so the "same subarray" check passes (avoids crash on single-address traces).
      */
-    if( operation == OA || operation == TRA ){
+    if( operation == OA || operation == TRA || operation == TR_READ ){
         NVMAddress nAddress2;
         nAddress2.SetPhysicalAddress( address );
         nextAccess->SetLine( nAddress, nAddress2, operation, cycle, dataBlock, oldDataBlock, threadId );

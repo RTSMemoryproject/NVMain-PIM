@@ -237,7 +237,7 @@ int TraceMain::RunTrace( int argc, char *argv[] )
         request->status = MEM_REQUEST_INCOMPLETE;
         request->owner = (NVMObject *)this;
 
-        if(request->type == ROWCLONE_PSM || request->type == OA || request->type == TRA)
+        if(request->type == ROWCLONE_PSM || request->type == OA || request->type == TRA || request->type == TR_READ)
         {
             request->address2 = tl->GetAddress2( );
         }
@@ -254,7 +254,7 @@ int TraceMain::RunTrace( int argc, char *argv[] )
         // TODO if we keep adding new operations, we should add a function in NVMainRequest to check if valid for trace
         if( request->type != READ && request->type != WRITE && 
             request->type != TRA && request->type != DRA && request->type != SRA &&
-            request->type != ODRA && request->type != OTRA && request->type != OA )
+            request->type != ODRA && request->type != OTRA && request->type != OA && request->type != TR_READ )
             std::cout << "traceMain: Unknown Operation: " << request->type 
                 << std::endl;
 

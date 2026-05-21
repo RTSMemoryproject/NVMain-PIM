@@ -77,6 +77,7 @@ RTM::RTM( )
     mem_reads = 0;
     mem_writes = 0;
     mem_TRAs = 0; 
+    mem_TR_READs = 0;
     mem_DRAs = 0;
     mem_oAs = 0;
 
@@ -122,6 +123,7 @@ void RTM::RegisterStats( )
     AddStat(mem_reads);
     AddStat(mem_writes);
     AddStat(mem_TRAs);
+    AddStat(mem_TR_READs);
     AddStat(mem_DRAs);
     AddStat(mem_oAs);
     AddStat(rb_hits);
@@ -187,6 +189,9 @@ bool RTM::IssueCommand( NVMainRequest *req )
         Enqueue(0, req);
     }else if(req->type == DRA){
         mem_DRAs++;
+        Enqueue(0, req);
+    }else if(req->type == TR_READ){
+        mem_TR_READs++;
         Enqueue(0, req);
     }
 
@@ -288,7 +293,7 @@ void RTM::Cycle( ncycle_t steps )
     if( nextRequest != NULL )
     {
         if (nextRequest->type == TRA || nextRequest->type == OA || nextRequest->type == DRA ||
-            nextRequest->type == SRA || nextRequest->type == ODRA || nextRequest->type == OTRA)
+            nextRequest->type == SRA || nextRequest->type == ODRA || nextRequest->type == OTRA || nextRequest->type == TR_READ)
             IssuePIMCommands( nextRequest );
         else 
             IssueMemoryCommands( nextRequest );

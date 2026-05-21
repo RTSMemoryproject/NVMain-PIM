@@ -77,6 +77,7 @@ class RTM : public MemoryController
     uint64_t measuredLatencies, measuredQueueLatencies, measuredTotalLatencies;
     double averageLatency, averageQueueLatency, averageTotalLatency;
     uint64_t mem_reads, mem_writes, mem_TRAs, mem_oAs, mem_DRAs;
+    uint64_t mem_TR_READs;
     uint64_t rb_hits;
     uint64_t rb_miss;
     uint64_t starvation_precharges;

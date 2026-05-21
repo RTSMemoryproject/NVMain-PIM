@@ -100,6 +100,7 @@ class SubArray : public NVMObject
     bool LocalWrite( NVMainRequest *request );
     bool OverlappedActivate( NVMainRequest *request );
     bool MultiRowActivate( NVMainRequest *request );
+    bool TransverseRead( NVMainRequest *request );
     bool Precharge( NVMainRequest *request );
     bool Refresh( NVMainRequest *request );
 
@@ -214,7 +215,8 @@ class SubArray : public NVMObject
     ncounter_t reads, writes, activates, precharges, refreshes, 
       overlapped_activates, overlapped_double_row_activates,
       overlapped_triple_row_activates, single_row_activates,
-      double_row_activates, triple_row_activates, local_writes;
+      double_row_activates, triple_row_activates, local_writes,
+      transverse_reads;
     ncounter_t idleTimer;
 
     ncounter_t openRow;

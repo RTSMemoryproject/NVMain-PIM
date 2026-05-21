@@ -744,7 +744,7 @@ ncycle_t StandardRank::NextIssuable( NVMainRequest *request )
     request->address.GetTranslatedAddress( NULL, NULL, &bank, NULL, NULL, NULL );
 
     if( request->type == ACTIVATE || request->type == REFRESH || request->type == DRA || request->type == TRA || 
-        request->type == OA || request->type == SRA || request->type == ODRA || request->type == OTRA ) 
+        request->type == OA || request->type == SRA || request->type == ODRA || request->type == OTRA || request->type == TR_READ ) 
         nextCompare = MAX( nextActivate, lastActivate[(RAWindex+1)%rawNum] + p->tRAW );
     else if( request->type == READ || request->type == READ_PRECHARGE ) nextCompare = nextRead;
     else if( request->type == WRITE || request->type == WRITE_PRECHARGE ) nextCompare = nextWrite;
@@ -764,7 +764,7 @@ bool StandardRank::IsIssuable( NVMainRequest *req, FailReason *reason )
 
     rv = true;
 
-    if( req->type == ACTIVATE || req->type == DRA || req->type == TRA || req->type == SRA )
+    if( req->type == ACTIVATE || req->type == DRA || req->type == TRA || req->type == SRA || req->type == TR_READ )
     {
         if( nextActivate > GetEventQueue( )->GetCurrentCycle( ) 
             || ( lastActivate[(RAWindex + 1) % rawNum] + p->tRAW ) 
@@ -937,6 +937,10 @@ bool StandardRank::IssueCommand( NVMainRequest *req )
             case DRA:
             case TRA:
                 rv = this->MultiRowActivate( req );
+                break;
+
+            case TR_READ:
+                rv = GetChild( req )->IssueCommand( req );
                 break;
 
             case READ:
