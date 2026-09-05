@@ -1581,7 +1581,7 @@ ncycle_t SubArray::NextIssuable( NVMainRequest *request )
 {
     ncycle_t nextCompare = 0;
 
-    if( request->type == ACTIVATE ) nextCompare = nextActivate;
+    if( request->type == ACTIVATE || request->type == TR_READ ) nextCompare = nextActivate;
     else if( request->type == READ ) nextCompare = nextRead;
     else if( request->type == WRITE ) nextCompare = nextWrite;
     else if( request->type == PRECHARGE ) nextCompare = nextPrecharge;
@@ -1603,7 +1603,28 @@ bool SubArray::IsIssuable( NVMainRequest *req, FailReason *reason )
     if( nextCommand != CMD_NOP )
         return false;
 
-    if( req->type == ACTIVATE || req->type == TRA || req->type == DRA || req->type == SRA || req->type == TR_READ )
+    if( req->type == TR_READ )
+    {
+        /* TR_READ can issue back-to-back without precharge in non-volatile RTM */
+        if( nextActivate > (GetEventQueue()->GetCurrentCycle())
+            || (p->WritePausing && isWriting && writeRequest->flags & NVMainRequest::FLAG_FORCED)
+            || (p->WritePausing && isWriting && !(req->flags & NVMainRequest::FLAG_PRIORITY)) )
+        {
+            rv = false;
+            if( reason ) 
+                reason->reason = SUBARRAY_TIMING;
+        }
+
+        if( rv == false )
+        {
+            if( nextActivate > (GetEventQueue()->GetCurrentCycle()) )
+            {
+                actWaits++;
+                actWaitTotal += nextActivate - (GetEventQueue()->GetCurrentCycle() );
+            }
+        }
+    }
+    else if( req->type == ACTIVATE || req->type == TRA || req->type == DRA || req->type == SRA )
     {
         if( nextActivate > (GetEventQueue()->GetCurrentCycle()) /* if it is too early to open */
             || (p->UsePrecharge && state != SUBARRAY_CLOSED)   /* or, the subarray needs a precharge */
@@ -2081,19 +2102,23 @@ ncounter_t SubArray::FindClosestPort(uint64_t dbc, uint64_t domain)
   
   if( StaticPortAcces )
   {
-      AP = domain / ( DOMAINS / nPorts ); // As an example: if DOMAINS = 100, nPorts = 2 and domain = 53, AP = 1, if domain is < 50, AP will be set to 0  
-   
-      // printf("Domains: %ld, currentDomain: %ld, DBC: %ld, Selected AP: %ld\n",DOMAINS, domain, dbc, AP);
+      ncounter_t domainsPerPort = DOMAINS / nPorts;
+      AP = (domainsPerPort > 0) ? (domain / domainsPerPort) : 0;
+      if( AP >= nPorts )
+          AP = nPorts - 1;
   }
   else
   {
-      int min = abs( rwPortPos[dbc][0] - domain );
+      int min = std::abs( rwPortPos[dbc][0] - static_cast<int>(domain) );
       for(uint16_t i = 1; i < nPorts; i++)
-        if( abs( rwPortPos[dbc][i] - domain ) < min )
-        {
-            min = abs( rwPortPos[dbc][i] - domain );
-            AP = i;
-        }
+      {
+          int curDist = std::abs( rwPortPos[dbc][i] - static_cast<int>(domain) );
+          if( curDist < min )
+          {
+              min = curDist;
+              AP = i;
+          }
+      }
   }
     
   return AP;  
@@ -2101,8 +2126,9 @@ ncounter_t SubArray::FindClosestPort(uint64_t dbc, uint64_t domain)
 
 bool SubArray::TransverseRead( NVMainRequest *request )
 {
-    uint64_t activateRow;
-    request->address.GetTranslatedAddress( &activateRow, NULL, NULL, NULL, NULL, NULL );
+    uint64_t dbc1, dom1, dbc2, dom2;
+    request->address.GetTranslatedAddress( &dbc1, &dom1, NULL, NULL, NULL, NULL );
+    request->address2.GetTranslatedAddress( &dbc2, &dom2, NULL, NULL, NULL, NULL );
 
     /* Check if we need to cancel or pause a write to service this request. */
     CheckWritePausing( );
@@ -2112,26 +2138,106 @@ bool SubArray::TransverseRead( NVMainRequest *request )
         std::cerr << "NVMain Error: SubArray violates ACTIVATION timing constraint!" << std::endl;
         return false;
     }
-    else if( p->UsePrecharge && state != SUBARRAY_CLOSED )
+
+    /* Guard against out-of-bounds DBC array access */
+    if( dbc1 >= p->DBCS || dbc2 >= p->DBCS )
     {
-        std::cerr << "NVMain Error: try to open a subarray that is not idle!" << std::endl;
+        std::cerr << "NVMain Error: DBC index out of range in TransverseRead!" << std::endl;
         return false;
+    }
+
+    ncycle_t max_shift_cycles = 0;
+
+    /* Dynamic Domain Wall Shift Mechanism for Racetrack Memory (Kirchhoff Dual-Row) */
+    if( p->MemIsRTM )
+    {
+        uint64_t dbcs[2] = { dbc1, dbc2 };
+        uint64_t doms[2] = { dom1, dom2 };
+        ncounter_t unique_tracks = (dbc1 == dbc2) ? 1 : 2;
+
+        for( ncounter_t t = 0; t < unique_tracks; t++ )
+        {
+            uint64_t cur_dbc = dbcs[t];
+            uint64_t cur_dom = doms[t];
+
+            ncounter_t port = FindClosestPort( cur_dbc, cur_dom );
+            ncounter_t dist = static_cast<ncounter_t>(std::abs( rwPortPos[cur_dbc][port] - static_cast<int>(cur_dom) ));
+
+            for( ncounter_t i = 0; i < nPorts; i++ )
+            {
+                if( i != port )
+                {
+                    if( rwPortPos[cur_dbc][port] < static_cast<int>(cur_dom) )
+                        rwPortPos[cur_dbc][i] += dist;
+                    else
+                        rwPortPos[cur_dbc][i] -= dist;
+
+                    // Clamp secondary port positions within physical nanowire limits [0, DOMAINS - 1]
+                    if( rwPortPos[cur_dbc][i] < 0 )
+                        rwPortPos[cur_dbc][i] = 0;
+                    else if( rwPortPos[cur_dbc][i] >= static_cast<int>(DOMAINS) )
+                        rwPortPos[cur_dbc][i] = static_cast<int>(DOMAINS) - 1;
+                }
+            }
+
+            ncounter_t trackShifts = dist;
+            if( LazyPortUpdate )
+            {
+                trackShifts *= wordSize;
+                rwPortPos[cur_dbc][port] = static_cast<int>(cur_dom);
+            }
+            else
+            {
+                trackShifts *= wordSize * 2;
+                rwPortPos[cur_dbc][port] = rwPortInitPos[cur_dbc][port];
+            }
+
+            totalnumShifts += trackShifts;
+
+            if( rwPortPos[cur_dbc][port] < 0 || rwPortPos[cur_dbc][port] >= static_cast<int>(DOMAINS) )
+            {
+                std::cerr << "Invalid Port position in TransverseRead" << std::endl;
+                exit(-1);
+            }
+
+            // Latency: In Eager mode include round-trip latency; take max across parallel tracks
+            ncycle_t cur_shift_cycles = (LazyPortUpdate ? dist : (dist * 2)) * p->tSH;
+            if( cur_shift_cycles > max_shift_cycles )
+                max_shift_cycles = cur_shift_cycles;
+
+            // Energy: accumulate shift energy across active tracks
+            double track_shift_energy = 0.0;
+            if( p->EnergyModel == "current" )
+            {
+                track_shift_energy = ( ( p->EIDD4R - p->EIDD3N ) * (double)(p->tBURST) ) / (double)(p->BANKS);
+            }
+            else
+            {
+                track_shift_energy = p->Esh * ( trackShifts / wordSize );
+            }
+
+            subArrayEnergy += track_shift_energy;
+            shiftEnergy += track_shift_energy;
+            shiftReqs++;
+        }
     }
 
     // 1. LATENCY CALCULATION: 5 ns converted dynamically to cycles
     ncycle_t tr_cycles = static_cast<ncycle_t>(std::ceil(5.0 * (static_cast<double>(p->CLK) / 1000.0)));
+    ncycle_t total_cycles = max_shift_cycles + tr_cycles;
 
     // 2. TIMING CONSTRAINTS UPDATING
-    nextPrecharge = MAX( nextPrecharge, GetEventQueue()->GetCurrentCycle() + tr_cycles );
-    nextRead = MAX( nextRead, GetEventQueue()->GetCurrentCycle() + tr_cycles );
-    nextWrite = MAX( nextWrite, GetEventQueue()->GetCurrentCycle() + tr_cycles );
-    nextPowerDown = MAX( nextPowerDown, GetEventQueue()->GetCurrentCycle() + tr_cycles );
+    nextActivate = MAX( nextActivate, GetEventQueue()->GetCurrentCycle() + total_cycles );
+    nextPrecharge = MAX( nextPrecharge, GetEventQueue()->GetCurrentCycle() + total_cycles );
+    nextRead = MAX( nextRead, GetEventQueue()->GetCurrentCycle() + total_cycles );
+    nextWrite = MAX( nextWrite, GetEventQueue()->GetCurrentCycle() + total_cycles );
+    nextPowerDown = MAX( nextPowerDown, GetEventQueue()->GetCurrentCycle() + total_cycles );
 
     // 3. SEND EVENT RESPONSE CALLBACK
-    GetEventQueue()->InsertEvent( EventResponse, this, request, GetEventQueue()->GetCurrentCycle() + tr_cycles );
+    GetEventQueue()->InsertEvent( EventResponse, this, request, GetEventQueue()->GetCurrentCycle() + total_cycles );
 
     // 4. SUBARRAY INTERNAL STATE UPDATE
-    openRow = activateRow;
+    openRow = dbc1;
     state = SUBARRAY_OPEN;
     writeCycle = false;
     lastActivate = GetEventQueue()->GetCurrentCycle();

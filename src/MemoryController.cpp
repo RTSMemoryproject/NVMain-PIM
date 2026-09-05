@@ -1630,7 +1630,7 @@ bool MemoryController::IssuePIMCommands( NVMainRequest *req )
     ncounter_t queueId = GetCommandQueueId(req->address);
 
     //If not overlap, the subarray should not be active
-    if(activeSubArray[rank][bank][subarray] && (req->type == SRA || req->type == DRA ||  req->type == TRA || req->type == TR_READ)){
+    if(activeSubArray[rank][bank][subarray] && (req->type == SRA || req->type == DRA ||  req->type == TRA)){
         commandQueues[queueId].push_back( MakePrechargeRequest( req ) );
     }
 
@@ -1640,6 +1640,7 @@ bool MemoryController::IssuePIMCommands( NVMainRequest *req )
     }
 
     //add request
+    req->issueCycle = GetEventQueue()->GetCurrentCycle();
     commandQueues[queueId].push_back( req );
     
     //Reset starvation counter
