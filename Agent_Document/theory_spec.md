@@ -6,9 +6,10 @@
 - It MUST NOT activate all rows in a SubArray. Doing so would violate the `tRAW` (Row Activate Window) power delivery limits and physically destroy the chip due to current spikes.
 - Address tracking (using both `address1` and `address2`) is absolutely necessary to identify which two rows are being superimposed.
 
-## 2. Dynamic Domain Wall Shift Mechanism
-- RTM requires moving data (Domain Walls) along a nanowire to a fixed access port before reading.
-- The shift cost is dynamic, not flat.
+## 2. Dynamic Domain Wall Shift Mechanism & Optimization
+- FM-index Backward Search exhibits **almost entirely random access** patterns, rendering hot/cold predictive mapping ineffective.
+- **Bucket-Size-Based Track Configuration**: Instead of traditional 32-bit tracks, the architecture expands the number of tracks per Domain Block Cluster (DBC) to exactly match the FM-index Bucket size (e.g., 256 or 512 bits). 
+- **Sequential Shift Elimination**: By aligning the track configuration with the Bucket size, a single transverse read can fetch the entire Bucket in parallel. This completely eliminates the 15+ sequential shifts that would normally be required for a 256-bit bucket in a standard 32-bit architecture.
 - Shift Distance (D) = |Target_Domain_Position - Current_Port_Position|
 - Dynamic Latency = D * tSH
 - Dynamic Energy = D * ESH

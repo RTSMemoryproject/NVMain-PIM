@@ -2192,6 +2192,10 @@ bool SubArray::TransverseRead( NVMainRequest *request )
                 rwPortPos[cur_dbc][port] = rwPortInitPos[cur_dbc][port];
             }
 
+            std::cout << "DEBUG PIM: cur_dbc=" << cur_dbc << " cur_dom=" << cur_dom 
+                      << " port=" << port << " dist=" << dist 
+                      << " trackShifts=" << trackShifts << std::endl;
+
             totalnumShifts += trackShifts;
 
             if( rwPortPos[cur_dbc][port] < 0 || rwPortPos[cur_dbc][port] >= static_cast<int>(DOMAINS) )

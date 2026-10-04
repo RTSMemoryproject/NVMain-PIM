@@ -1750,6 +1750,13 @@ bool MemoryController::IssueMemoryCommands( NVMainRequest *req )
          * buffer hit
          * or 2) ClosePage == 2, the request is always the last request
          */
+        if( p->MemIsRTM )
+        {
+            NVMainRequest *shiftRequest = MakeShiftRequest( req ); //Place a shift request before the actual read/write on the command queue
+            shiftRequest->flags |= (writingArray != NULL && writingArray->IsWriting( )) ? NVMainRequest::FLAG_PRIORITY : 0;
+            commandQueues[queueId].push_back( shiftRequest );
+        }
+
         if( req->flags & NVMainRequest::FLAG_LAST_REQUEST && p->UsePrecharge )
         {
             commandQueues[queueId].push_back( MakeImplicitPrechargeRequest( req ) );
@@ -1760,13 +1767,6 @@ bool MemoryController::IssueMemoryCommands( NVMainRequest *req )
         }
         else
         {
-            if( p->MemIsRTM )
-            {
-                NVMainRequest *shiftRequest = MakeShiftRequest( req ); //Place a shift request before the actual read/write on the command queue
-                shiftRequest->flags |= (writingArray != NULL && writingArray->IsWriting( )) ? NVMainRequest::FLAG_PRIORITY : 0;
-                commandQueues[queueId].push_back( shiftRequest );
-            }
-           
             commandQueues[queueId].push_back( req );
         }
 
