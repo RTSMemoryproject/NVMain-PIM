@@ -1180,9 +1180,9 @@ bool SubArray::Shift( NVMainRequest *request )
     }
     else
     {
-        /* Flat Energy Model */
-        subArrayEnergy += p->Esh * ( numShifts / wordSize );// Esh = energy/single-shift for the entire word, for more than one shifts: * with numShifts. 
-        shiftEnergy += p->Esh * ( numShifts / wordSize );
+        /* Flat Energy Model: Esh in thesis Table 2 is for a baseline 32-bit track group. */
+        subArrayEnergy += ( p->Esh / 32.0 ) * numShifts;
+        shiftEnergy += ( p->Esh / 32.0 ) * numShifts;
     }
 
     shiftReqs++;
@@ -2217,7 +2217,9 @@ bool SubArray::TransverseRead( NVMainRequest *request )
             }
             else
             {
-                track_shift_energy = p->Esh * ( trackShifts / wordSize );
+                // In thesis Table 2, Esh (0.019 nJ) is for a baseline 32-track group.
+                // For wordSize tracks, shift energy scales proportionally: (trackShifts / 32) * Esh
+                track_shift_energy = ( p->Esh / 32.0 ) * trackShifts;
             }
 
             subArrayEnergy += track_shift_energy;

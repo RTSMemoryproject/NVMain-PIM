@@ -1,4 +1,24 @@
-# 跨層級協同設計：RTM-PIM 架構下「近埠填充策略」之技術原理與模擬驗證
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>跨層級協同設計：RTM-PIM 架構下「近埠填充策略」之技術原理與模擬驗證</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Microsoft JhengHei'; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+        h1, h2, h3 { color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        h1 { font-size: 24px; text-align: center; border-bottom: 2px solid #2c3e50; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f8f9fa; color: #2c3e50; font-weight: bold; }
+        tr:nth-child(even) { background-color: #fcfcfc; }
+        blockquote { background-color: #f8f9fa; border-left: 4px solid #007bff; padding: 15px; margin: 20px 0; border-radius: 4px; font-size: 14px; }
+        code { background-color: #f1f1f1; padding: 2px 5px; border-radius: 3px; font-family: Consolas, monospace; }
+    </style>
+</head>
+<body>
+    <div id="content"></div>
+    <textarea id="markdown-source" style="display:none;">
+# 跨層級協同設計：RT-BPIM 架構下「近埠填充策略」之技術原理與模擬驗證
 
 **報告主旨**：針對原論文在 RTM-PIM 架構中提出的三種組態 (`BaselineCPU`, `BucketCPU`, `BucketPIM`)，分析其在延遲與能耗上之折衷關係 (Trade-off)，並提出結合「近埠填充策略 (Near-Port Padding, NPP)」之優化架構，同時提供 NVMain 模擬器之量化數據對比。
 
@@ -25,7 +45,6 @@
 
 ### 2.1 技術原理 (近埠填充策略, NPP)
 此策略修改記憶體之空間配置邏輯，將遠離存取埠的磁疇配置為無效區域 (Padding)，限制 FM-index Bucket 僅能存放於距離實體存取埠 $D_{max}$（例如 8 步）以內之區間。
-
 透過犧牲部分儲存容量（約 60%），此策略有效最小化初始尋址之實體距離，進而降低大規模軌道移位所需之動態能耗。
 
 ---
@@ -44,7 +63,7 @@
 ### 3.2 測量指標定義
 * **移位延遲 (Latency)**：以「物理磁疇移動步數 (Steps / Read)」及對應的「奈秒時延 (ns / Read, 步數 × 2.14 ns)」為量化指標。
 * **動態移位能耗 (Shift Energy)**：以「軌道位移總數 (Track-Shifts / Read)」及「實體移位能耗 (nJ / Read)」為量化指標。
-  - 計算方式：$\text{Track-Shifts} = \text{移動步數} \times \text{軌道寬度}$；$\text{實體移位能耗} = \frac{\text{Track-Shifts}}{32} \times 0.019\text{ nJ}$。
+  - 計算方式：Track-Shifts = 移動步數 × 軌道寬度；實體移位能耗 = (Track-Shifts / 32) × 0.019 nJ。
 
 ### 3.3 實驗數據總結表
 
@@ -57,9 +76,7 @@
 > [!NOTE]
 > *註 1：原論文之 `BucketCPU` 與 `BucketPIM` 於動態移位能耗上具備相同之物理行為，故共用模擬數據。*
 > *註 2：本研究方案之模擬數據受限於多讀寫頭鉗制邏輯，理論上移位延遲可進一步降低。*
-
 ---
-
 ## 4. 數據分析與研究貢獻
 
 ### 4.1 軌道擴展之移位能耗代價
@@ -88,3 +105,11 @@
 
 ### 6. 總結
 原論文受限於硬體設計視角，需妥協於軌道擴展帶來之能耗增加。本研究引入軟體資料佈局，透過犧牲部分儲存容量作為 Padding，可有效彌補硬體軌道擴寬之能耗缺陷。
+    </textarea>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        const md = document.getElementById('markdown-source').value;
+        document.getElementById('content').innerHTML = marked.parse(md);
+    </script>
+</body>
+</html>
